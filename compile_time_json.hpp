@@ -1,3 +1,9 @@
+#pragma once
+
+#if __cplusplus < 202302L
+    #error out of date c++ version, compile with -stdc++=2c
+#endif
+
 #include <algorithm>
 #include <expected> //not needed after changing to c++26's compie time exceptions
 #include <ranges>
@@ -208,13 +214,17 @@ namespace ctf {
             template <std::array tp_data, template <std::array, bool> class tp_json_entity_tp>
             struct json_array {
                 template <std::size_t tp_index>
-                requires (requires { read_json_impl<tp_data, true, tp_index, tp_json_entity_tp>; })
+                auto constexpr static has_idx = requires { read_json_impl<tp_data, true, tp_index, tp_json_entity_tp>; };
+                template <std::size_t tp_index>
+                requires (has_idx<tp_index>)
                 auto constexpr static at_idx = read_json_impl<tp_data, true, tp_index, tp_json_entity_tp>;
             };
             template <std::array tp_data, template <std::array, bool> class tp_json_entity_tp>
             struct json_object {
                 template <string tp_string>
-                requires (requires { read_json_impl<tp_data, false, tp_string.m_data, tp_json_entity_tp>; })
+                auto constexpr static has_key = requires { read_json_impl<tp_data, false, tp_string.m_data, tp_json_entity_tp>; };
+                template <string tp_string>
+                requires (has_key<tp_string>)
                 auto constexpr static at_key = read_json_impl<tp_data, false, tp_string.m_data, tp_json_entity_tp>;
             };
             
