@@ -5,11 +5,12 @@
 #endif
 
 #include <algorithm>
+#include <charconv>
 #include <expected> //not needed after changing to c++26's compie time exceptions
 #include <ranges>
 #include <string_view>
 #include <type_traits>
-#include <charconv>
+#include <utility>
 
 // [[c++26]]: change all s_assert's to c++26's compile-time exceptions, then no need for std::expected as well
 // [[c++26]]: change to c++26's structured bindings
@@ -54,7 +55,6 @@ namespace ctf {
             auto constexpr count_while = []
                 <std::ranges::input_range tp_input_range_t, std::predicate<std::ranges::range_value_t<tp_input_range_t>> tp_predicate_t>
                 (tp_input_range_t&& p_range, tp_predicate_t&& p_predicate) { return std::ranges::distance(std::ranges::begin(p_range), std::ranges::find_if_not(p_range, p_predicate)); };
-
 
             template <std::size_t tp_size>
             struct string {
@@ -172,6 +172,7 @@ namespace ctf {
                         if constexpr (tp_is_array)
                             ++l_optional_index;
                     }
+                    std::unreachable(); // suppresses false clang error of not no return value
                 }();
                 if constexpr (!l_result.has_value())
                     static_assert(false, l_result.error());
@@ -232,7 +233,7 @@ namespace ctf {
             struct json_entity : std::conditional_t<tp_is_array, json_array<tp_data, json_entity>, json_object<tp_data, json_entity>> {};
         }
 
-        template <std::array tp_data>
-        auto constexpr read_json = detail::json_entity<tp_data, false>{};
+        template <detail::string tp_data>
+        auto constexpr read_json = detail::json_entity<tp_data.m_data, false>{};
     }
 }
