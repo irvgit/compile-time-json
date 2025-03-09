@@ -70,21 +70,19 @@ namespace ctf {
             template <std::array tp_data, bool tp_is_array, auto tp_string_or_index, template <std::array, bool> class tp_json_entity_tp>
             auto constexpr read_json_impl = [] {
                 enum class entity : std::uint8_t { value, object, array };
-                auto constexpr l_result = [] {
+                auto constexpr static l_result = [] {
                     struct return_type { entity m_entity; std::string_view m_value_or_nested; char m_value_type; };
                     using expected_return_type_t = std::expected<return_type, std::string_view>;
-                    auto constexpr s_assert = []<auto tp_char> (auto&& p_subrange) {
+                    auto constexpr static s_assert = []<auto tp_char> (auto&& p_subrange) {
                         if (std::ranges::empty(p_subrange))
-                            return expected_return_type_t{std::unexpect, "unexpected end of data, expected '_'"sv};
-                        if (p_subrange.front() != tp_char) {
-                            auto constexpr static s_as_array = std::to_array("expected '_'");
-                            return expected_return_type_t{std::unexpect, std::string_view{std::ranges::data(array_replace_char<s_as_array, '_', tp_char>)}};
-                        }
+                            return expected_return_type_t{std::unexpect, std::ranges::data(array_replace_char<std::to_array("unexpected end of data, expected '_'"), '_', tp_char>)};
+                        if (p_subrange.front() != tp_char)
+                            return expected_return_type_t{std::unexpect, std::ranges::data(array_replace_char<std::to_array("expected '_'"), '_', tp_char>)};
                         return expected_return_type_t{};
                     };
-                    auto constexpr l_opening_delimiter = tp_is_array ? '[' : '{';
-                    auto constexpr l_closing_delimiter = tp_is_array ? ']' : '}';
-                    auto l_subrange       = std::ranges::subrange{tp_data};
+                    auto constexpr static l_opening_delimiter = tp_is_array ? '[' : '{';
+                    auto constexpr static l_closing_delimiter = tp_is_array ? ']' : '}';
+                    auto l_subrange       = std::ranges::subrange{tp_data}; //null termination is kept unless string_view'ing here, but it doesn't matter
                     auto l_optional_index = std::conditional_t<tp_is_array, std::size_t, decltype(std::ignore)>{};
                     auto l_key            = std::conditional_t<!tp_is_array, std::string_view, decltype(std::ignore)>{};
                     auto l_found = false;
@@ -116,8 +114,8 @@ namespace ctf {
                             if (l_found)
                                 return expected_return_type_t{std::in_place, l_subrange.front() == '{' ? entity::object : entity::array, std::string_view{l_subrange}, '\0'};
                             else {
-                                l_subrange >> [c_depth = std::size_t{0}, c_opening_delimiter = l_subrange.front(), closing_delimiter = l_subrange.front() == '{' ? '}' : ']'](auto a) mutable {
-                                    return (a == c_opening_delimiter ? ++c_depth : a == closing_delimiter && c_depth != 0 ? --c_depth : c_depth) != 0 || any_of(a, c_opening_delimiter, closing_delimiter);
+                                l_subrange >> [c_depth = std::size_t{0}, c_opening_delimiter = l_subrange.front(), c_closing_delimiter = l_subrange.front() == '{' ? '}' : ']'](auto a) mutable {
+                                    return (a == c_opening_delimiter ? ++c_depth : a == c_closing_delimiter && c_depth != 0 ? --c_depth : c_depth) != 0 || any_of(a, c_opening_delimiter, c_closing_delimiter);
                                 };
                             }
                         }
@@ -202,7 +200,7 @@ namespace ctf {
                             return nullptr;
                     }
                     else {
-                        auto constexpr l_nested_substring_as_array = [&] {
+                        auto constexpr static l_nested_substring_as_array = [] {
                             auto l_array = std::array<char, std::ranges::size(l_result.value().m_value_or_nested)>{};
                             std::ranges::copy(l_result.value().m_value_or_nested, std::ranges::begin(l_array));
                             return l_array;
