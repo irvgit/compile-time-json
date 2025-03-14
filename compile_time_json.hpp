@@ -2,7 +2,13 @@
 
 #if __cplusplus < 202302L
     #error out of date c++ version, compile with -stdc++=2c
-#endif
+#elif defined(__clang__) && __clang_major__ < 19
+    #error out of date clang, compile with latest version
+#elif !defined(__clang__) && defined(__GNUC__) && __GNUC__ < 14
+    #error out of date g++, compile with latest version
+#elif defined(_MSC_VER)
+    #error msvc does not yet support the latest c++ features
+#else
 
 #include <algorithm>
 #include <charconv>
@@ -67,10 +73,17 @@ namespace ctf {
             template <std::size_t tp_size>
             string(const std::array<char, tp_size>&) -> string<tp_size>;
 
+            template <const std::string_view& tp_string_view>
+            auto constexpr string_view_to_array = [] {
+                auto l_array = std::array<char, std::ranges::size(tp_string_view)>{};
+                std::ranges::copy(tp_string_view, std::ranges::begin(l_array));
+                return l_array;
+            }();
+
             template <std::array tp_data, bool tp_is_array, auto tp_string_or_index, template <std::array, bool> class tp_json_entity_tp>
             auto constexpr read_json_impl = [] {
                 enum class entity : std::uint8_t { value, object, array };
-                auto constexpr static l_result = [] {
+                auto constexpr static s_result = [] {
                     struct return_type { entity m_entity; std::string_view m_value_or_nested; char m_value_type; };
                     using expected_return_type_t = std::expected<return_type, std::string_view>;
                     auto constexpr static s_assert = []<auto tp_char> (auto&& p_subrange) {
@@ -80,8 +93,8 @@ namespace ctf {
                             return expected_return_type_t{std::unexpect, std::ranges::data(array_replace_char<std::to_array("expected '_'"), '_', tp_char>)};
                         return expected_return_type_t{};
                     };
-                    auto constexpr static l_opening_delimiter = tp_is_array ? '[' : '{';
-                    auto constexpr static l_closing_delimiter = tp_is_array ? ']' : '}';
+                    auto constexpr static s_opening_delimiter = tp_is_array ? '[' : '{';
+                    auto constexpr static s_closing_delimiter = tp_is_array ? ']' : '}';
                     auto l_subrange       = std::ranges::subrange{tp_data}; //null termination is kept unless string_view'ing here, but it doesn't matter
                     auto l_optional_index = std::conditional_t<tp_is_array, std::size_t, decltype(std::ignore)>{};
                     auto l_key            = std::conditional_t<!tp_is_array, std::string_view, decltype(std::ignore)>{};
@@ -89,7 +102,7 @@ namespace ctf {
                     l_subrange >> is_whitespace;
                     if (std::ranges::empty(l_subrange))
                         return expected_return_type_t{std::unexpect, "data was empty"sv};
-                    if (auto r = s_assert.template operator()<l_opening_delimiter>(l_subrange); !r) return r;
+                    if (auto r = s_assert.template operator()<s_opening_delimiter>(l_subrange); !r) return r;
                     l_subrange >> 1 >> is_whitespace;
                     for (; l_subrange;) {
                         if constexpr (!tp_is_array) {
@@ -163,7 +176,7 @@ namespace ctf {
                             }
                         }
                         l_subrange >> is_whitespace;
-                        if (l_subrange.front() == l_closing_delimiter)
+                        if (l_subrange.front() == s_closing_delimiter)
                             return expected_return_type_t{std::unexpect, "'?' not found"sv};
                         if (auto r = s_assert.template operator()<','>(l_subrange); !r) return r;
                         l_subrange >> 1 >> is_whitespace;
@@ -172,40 +185,38 @@ namespace ctf {
                     }
                     std::unreachable(); // suppresses false clang error of not no return value
                 }();
-                if constexpr (!l_result.has_value())
-                    static_assert(false, l_result.error());
+                if constexpr (!s_result.has_value())
+                    static_assert(false, s_result.error());
                 else {
                     //change to constexpr structured binding in c++26:
-                    //auto [l_entity, l_value_or_nested, l_value_type] = l_result.value();
-                    if constexpr (l_result.value().m_entity == entity::value) {
-                        if constexpr (l_result.value().m_value_type == 's')
-                            return l_result.value().m_value_or_nested;
-                        else if constexpr (l_result.value().m_value_type == 'i') {
-                            auto l_value = std::conditional_t<l_result.value().m_value_or_nested.front() == '-', std::intmax_t, std::uintmax_t>{};
-                            std::from_chars(std::ranges::begin(l_result.value().m_value_or_nested), std::ranges::end(l_result.value().m_value_or_nested), l_value); 
+                    //auto [l_entity, l_value_or_nested, l_value_type] = s_result.value();
+                    if constexpr (s_result.value().m_entity == entity::value) {
+                        if constexpr (s_result.value().m_value_type == 's') {
+                            auto constexpr static s_value = s_result.value().m_value_or_nested;
+                            return string_view_to_array<s_value>;
+                        }
+                        else if constexpr (s_result.value().m_value_type == 'i') {
+                            auto l_value = std::conditional_t<s_result.value().m_value_or_nested.front() == '-', std::intmax_t, std::uintmax_t>{};
+                            std::from_chars(std::ranges::begin(s_result.value().m_value_or_nested), std::ranges::end(s_result.value().m_value_or_nested), l_value); 
                             //std::from_chars int overload is buggy
                             return l_value;
                         }
-                        else if constexpr (l_result.value().m_value_type == 'f') {
+                        else if constexpr (s_result.value().m_value_type == 'f') {
                             static_assert(false, "c++ does not yet have a constexpr string to float facility");
                             return;
                             //auto l_value = float{}; //change to std::float
-                            //std::from_chars(std::ranges::begin(l_result.value().m_value_or_nested), std::ranges::end(l_result.value().m_value_or_nested), l_value);
+                            //std::from_chars(std::ranges::begin(s_result.value().m_value_or_nested), std::ranges::end(s_result.value().m_value_or_nested), l_value);
                             //return l_value;
                             //maybe switch out std::from_chars with compile-time std::format, whichever gets implemented first
                         }
-                        else if constexpr (l_result.value().m_value_type == 'b')
-                            return l_result.value().m_value_or_nested == "true"sv;
-                        else if constexpr (l_result.value().m_value_type == 'n')
+                        else if constexpr (s_result.value().m_value_type == 'b')
+                            return s_result.value().m_value_or_nested == "true"sv;
+                        else if constexpr (s_result.value().m_value_type == 'n')
                             return nullptr;
                     }
                     else {
-                        auto constexpr static l_nested_substring_as_array = [] {
-                            auto l_array = std::array<char, std::ranges::size(l_result.value().m_value_or_nested)>{};
-                            std::ranges::copy(l_result.value().m_value_or_nested, std::ranges::begin(l_array));
-                            return l_array;
-                        }();
-                        return tp_json_entity_tp<l_nested_substring_as_array, l_result.value().m_entity == entity::array>{};
+                        auto constexpr static s_nested = s_result.value().m_value_or_nested;
+                        return tp_json_entity_tp<string_view_to_array<s_nested>, s_result.value().m_entity == entity::array>{};
                     }
                 }
             }();
@@ -235,3 +246,4 @@ namespace ctf {
         auto constexpr read_json = detail::json_entity<tp_data.m_data, false>{};
     }
 }
+#endif
